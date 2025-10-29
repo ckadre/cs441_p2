@@ -18,3 +18,18 @@ design.
 level work.
 Task 1 does not have a separate deliverable. Your design will be presented in the report described in Task
 3.
+
+-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0-0
+Pipeline stages: fetch, decode, execute, memory, write back
+S12 instructions: 
+    JMP X   PC <- X
+    JN X    A<0 then PC <- X, else PC++
+    JZ X    A=0 then PC <- X, else PC++
+    LOAD X  A <- M(X), PC++
+    STORE X M(X) <- A, PC++
+    LOADI   A <- I, PC++
+    STOREI  I <- A, PC++
+    AND X   A <- A and M(X), PC++
+    OR X    A <- A or M(X), PC++
+    ADD X   A <- A + M(X), PC++
+    SUB X   A <- A - M(X), PC++
