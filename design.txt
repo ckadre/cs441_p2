@@ -1,0 +1,20 @@
+Before you can write a simulator, you must have a design to simulate! Each group will design a pipelined
+processor for the S12 ISA. For the purposes of this project, assume it takes a single clock cycle for a
+memory request to be fulfilled. (e.g. if the address is presented to the memory at the beginning of one
+clock cycle, the result is ready at the beginning of the next clock cycle). You must implement all S12
+instructions including LOADI and STOREI.
+
+Must:
+- Your datapath must have at least 4 pipeline stages (I would suggest 5 as the default, but you
+have some flexibility).
+- You must identify all required control signals and all available input to the control logic.
+- You must detect hazards and respond appropriately – e.g. inserting stalls, forwarding, etc.
+- You must identify all data stored at each pipestage latch, including control signals.
+
+May:
+- You may implement forwarding wherever you would like to and wherever makes sense for your
+design.
+- You may implement a version of speculative execution, but you do not have to! This is bonus
+level work.
+Task 1 does not have a separate deliverable. Your design will be presented in the report described in Task
+3.
