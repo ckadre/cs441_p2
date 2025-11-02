@@ -1,0 +1,51 @@
+00: LOAD FF      | ACC<=000
+01: SUB FF       | ACC<=000
+02: STORE FF     | MEM[FF]<=000
+03: LOAD FE      | ACC<=005
+04: JZ 0C        | not taken
+05: LOAD FF      | ACC<=000
+06: ADD FD       | ACC<=00A
+07: STORE FF     | MEM[FF]<=00A
+08: LOAD FE      | ACC<=005
+09: SUB A2       | ACC<=004
+0A: STORE FE     | MEM[FE]<=004
+0B: JMP 03       | TAKEN -> 03
+03: LOAD FE      | ACC<=004
+04: JZ 0C        | not taken
+05: LOAD FF      | ACC<=00A
+06: ADD FD       | ACC<=014
+07: STORE FF     | MEM[FF]<=014
+08: LOAD FE      | ACC<=004
+09: SUB A2       | ACC<=003
+0A: STORE FE     | MEM[FE]<=003
+0B: JMP 03       | TAKEN -> 03
+03: LOAD FE      | ACC<=003
+04: JZ 0C        | not taken
+05: LOAD FF      | ACC<=014
+06: ADD FD       | ACC<=01E
+07: STORE FF     | MEM[FF]<=01E
+08: LOAD FE      | ACC<=003
+09: SUB A2       | ACC<=002
+0A: STORE FE     | MEM[FE]<=002
+0B: JMP 03       | TAKEN -> 03
+03: LOAD FE      | ACC<=002
+04: JZ 0C        | not taken
+05: LOAD FF      | ACC<=01E
+06: ADD FD       | ACC<=028
+07: STORE FF     | MEM[FF]<=028
+08: LOAD FE      | ACC<=002
+09: SUB A2       | ACC<=001
+0A: STORE FE     | MEM[FE]<=001
+0B: JMP 03       | TAKEN -> 03
+03: LOAD FE      | ACC<=001
+04: JZ 0C        | not taken
+05: LOAD FF      | ACC<=028
+06: ADD FD       | ACC<=032
+07: STORE FF     | MEM[FF]<=032
+08: LOAD FE      | ACC<=001
+09: SUB A2       | ACC<=000
+0A: STORE FE     | MEM[FE]<=000
+0B: JMP 03       | TAKEN -> 03
+03: LOAD FE      | ACC<=000
+04: JZ 0C        | TAKEN -> 0C
+0C: HALT

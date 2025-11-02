@@ -1,0 +1,22 @@
+// Multiplier (repeated addition)
+00000000 000000000000   // PC=00, ACC=0
+
+00 010011111111          // LOAD  FF
+01 101111111111          // SUB   FF
+02 010111111111          // STORE FF
+03 010011111110          // LOAD  FE
+04 001000001100          // JZ    0C  
+05 010011111111          // LOAD  FF
+06 101011111101          // ADD   FD
+07 010111111111          // STORE FF
+08 010011111110          // LOAD  FE
+09 101110100010          // SUB   A2  
+0A 010111111110          // STORE FE
+0B 000000000011          // JMP   03
+0C 111100000000          // HALT
+
+// Data
+A2 000000000001          // constant 1
+FD 000000001010          // multiplicand = 10
+FE 000000000101          // multiplier  = 5
+FF 000000000000          // result (zeroed anyway)

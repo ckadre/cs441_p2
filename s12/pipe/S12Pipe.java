@@ -28,6 +28,11 @@ public final class S12Pipe implements Cpu {
   // Config
   private boolean enableForwarding = true;
 
+  // Flags for forwarding
+  private boolean wbBypassValid = false;
+  private boolean wbBypassRegWrite = false;
+  private int wbBypassData = 0;
+
   // Trace
   private TraceSink sink;
   private final ArrayDeque<String> retireQ = new ArrayDeque<>();
@@ -54,9 +59,15 @@ public final class S12Pipe implements Cpu {
 
   @Override public void tick(){
     WB();
+
+    wbBypassValid    = mem_wb.valid;
+    wbBypassRegWrite = wbBypassValid && mem_wb.ctrl != null && mem_wb.ctrl.RegWrite;
+    wbBypassData     = wbBypassValid ? (mem_wb.wbData & 0xFFF) : 0;
+
     MEM();
-    EX();
+
     boolean stalled = hazardDetectAndStallDecision();
+    EX();
     ID(stalled);
     IF(stalled);
     cycles++;
@@ -139,8 +150,8 @@ public final class S12Pipe implements Cpu {
         if (cand != a) { a = cand; fwdEXCount++; }
       }
       // MEM/WB->EX forward: producer writes in MEM (loads/mem-ALU)
-      else if (mem_wb.valid && mem_wb.ctrl != null && mem_wb.ctrl.RegWrite) {
-        int cand = mem_wb.wbData;
+      else if (wbBypassValid && wbBypassRegWrite) {
+        int cand = wbBypassData & 0xFFF;
         if (cand != a) { a = cand; fwdMEMCount++; }
       }
     }
@@ -233,7 +244,9 @@ public final class S12Pipe implements Cpu {
     if (mem_wb.ctrl.op == Op.HALT) halted = true;
   }
 
-  private static boolean isTrueLoad(Ctrl c){ return c != null && c.MemRead && (c.op == Op.LOAD || c.op == Op.LOADI); }
+  private static boolean producesInMEM(Ctrl c) {
+    return c != null && c.RegWrite && c.MemRead; // LOAD, LOADI, ADD, SUB, AND, OR
+  }
   private static Op decodeIfID(int instr){ return Op.fromNibble((instr >> 8) & 0xF); }
 
   // --- Hazards ---
@@ -247,17 +260,17 @@ public final class S12Pipe implements Cpu {
     }
   }
 
-  private boolean hazardDetectAndStallDecision(){
-    //load→use: producer currently in EX and is a true LOAD
-    boolean producerValid = ex_mem.valid;
-    Ctrl pc = ex_mem.ctrl;
-    boolean loadUseProducer = producerValid && isTrueLoad(pc);
-
-    Op idOp = Op.NOP;
-    if (if_id.valid) idOp = decodeIfID(if_id.instr);
-
-    boolean consumerNeedsACC = needsACC(idOp);
-    return loadUseProducer && consumerNeedsACC;
+  private boolean hazardDetectAndStallDecision() {
+    boolean prodA = id_ex.valid && producesInMEM(id_ex.ctrl);
+    Op ifidOp = if_id.valid ? decodeIfID(if_id.instr) : Op.NOP;
+    boolean consA = needsACC(ifidOp);
+  
+    boolean prodB = ex_mem.valid && producesInMEM(ex_mem.ctrl);
+    boolean consB = id_ex.valid && needsACC(id_ex.op);
+  
+    boolean stall = (prodA && consA) || (prodB && consB);
+  
+    return stall;
   }
 
   // Trace formatting

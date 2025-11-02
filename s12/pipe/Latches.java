@@ -73,7 +73,7 @@ public final class Latches {
       ctrl = Ctrl.nop();
       valid = false;
     }
-    public MEM_WB bubble() {
+    public static MEM_WB bubble() {
       var l = new MEM_WB();
       l.clear();
       return l;

@@ -1,0 +1,83 @@
+00: LOAD A1      | ACC<=00A
+01: JZ 08        | not taken
+02: SUB A2       | ACC<=009
+03: STORE A1     | MEM[A1]<=009
+04: LOAD A0      | ACC<=005
+05: ADD A3       | ACC<=005
+06: STORE A3     | MEM[A3]<=005
+07: JMP 00       | TAKEN -> 00
+00: LOAD A1      | ACC<=009
+01: JZ 08        | not taken
+02: SUB A2       | ACC<=008
+03: STORE A1     | MEM[A1]<=008
+04: LOAD A0      | ACC<=005
+05: ADD A3       | ACC<=00A
+06: STORE A3     | MEM[A3]<=00A
+07: JMP 00       | TAKEN -> 00
+00: LOAD A1      | ACC<=008
+01: JZ 08        | not taken
+02: SUB A2       | ACC<=007
+03: STORE A1     | MEM[A1]<=007
+04: LOAD A0      | ACC<=005
+05: ADD A3       | ACC<=00F
+06: STORE A3     | MEM[A3]<=00F
+07: JMP 00       | TAKEN -> 00
+00: LOAD A1      | ACC<=007
+01: JZ 08        | not taken
+02: SUB A2       | ACC<=006
+03: STORE A1     | MEM[A1]<=006
+04: LOAD A0      | ACC<=005
+05: ADD A3       | ACC<=014
+06: STORE A3     | MEM[A3]<=014
+07: JMP 00       | TAKEN -> 00
+00: LOAD A1      | ACC<=006
+01: JZ 08        | not taken
+02: SUB A2       | ACC<=005
+03: STORE A1     | MEM[A1]<=005
+04: LOAD A0      | ACC<=005
+05: ADD A3       | ACC<=019
+06: STORE A3     | MEM[A3]<=019
+07: JMP 00       | TAKEN -> 00
+00: LOAD A1      | ACC<=005
+01: JZ 08        | not taken
+02: SUB A2       | ACC<=004
+03: STORE A1     | MEM[A1]<=004
+04: LOAD A0      | ACC<=005
+05: ADD A3       | ACC<=01E
+06: STORE A3     | MEM[A3]<=01E
+07: JMP 00       | TAKEN -> 00
+00: LOAD A1      | ACC<=004
+01: JZ 08        | not taken
+02: SUB A2       | ACC<=003
+03: STORE A1     | MEM[A1]<=003
+04: LOAD A0      | ACC<=005
+05: ADD A3       | ACC<=023
+06: STORE A3     | MEM[A3]<=023
+07: JMP 00       | TAKEN -> 00
+00: LOAD A1      | ACC<=003
+01: JZ 08        | not taken
+02: SUB A2       | ACC<=002
+03: STORE A1     | MEM[A1]<=002
+04: LOAD A0      | ACC<=005
+05: ADD A3       | ACC<=028
+06: STORE A3     | MEM[A3]<=028
+07: JMP 00       | TAKEN -> 00
+00: LOAD A1      | ACC<=002
+01: JZ 08        | not taken
+02: SUB A2       | ACC<=001
+03: STORE A1     | MEM[A1]<=001
+04: LOAD A0      | ACC<=005
+05: ADD A3       | ACC<=02D
+06: STORE A3     | MEM[A3]<=02D
+07: JMP 00       | TAKEN -> 00
+00: LOAD A1      | ACC<=001
+01: JZ 08        | not taken
+02: SUB A2       | ACC<=000
+03: STORE A1     | MEM[A1]<=000
+04: LOAD A0      | ACC<=005
+05: ADD A3       | ACC<=032
+06: STORE A3     | MEM[A3]<=032
+07: JMP 00       | TAKEN -> 00
+00: LOAD A1      | ACC<=000
+01: JZ 08        | TAKEN -> 08
+08: HALT

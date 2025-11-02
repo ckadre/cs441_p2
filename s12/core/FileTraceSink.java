@@ -2,7 +2,6 @@ package core;
 
 import java.io.BufferedWriter;
 import java.io.FileOutputStream;
-import java.io.IOError;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.io.UncheckedIOException;

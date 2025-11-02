@@ -5,7 +5,6 @@ import io.*;
 import pipe.S12Pipe;
 
 import java.nio.file.*;
-import java.util.List;
 
 public final class Sim {
   public static void main(String[] args) throws Exception {
@@ -17,9 +16,12 @@ public final class Sim {
     String memFile = args[0]; 
     Integer maxCycles = null; 
     boolean fwd = true;
+    String outBase = null;
 
     for (int i=1;i<args.length;i++){
       switch(args[i]){
+        case "-o": outBase = args[++i]; 
+                  break;
         case "-c":  maxCycles = Integer.parseInt(args[++i]);
                     break;
         case "--no-fwd": fwd = false;
@@ -30,19 +32,27 @@ public final class Sim {
 
     MemImage img = MemIO.read(Paths.get(memFile));
     Cpu cpu = new S12Pipe();
-    cpu.reset(); 
+    cpu.reset();
     cpu.loadMemory(img.mem);
-    cpu.setState(img.pc, img.acc); 
+    cpu.setState(img.pc, img.acc);
     cpu.setForwardingEnabled(fwd);
+    
+    if (outBase != null) {
+      try (var sink = new FileTraceSink(outBase)) {
+        cpu.setTraceSink(sink);
+        cpu.run(maxCycles);
+      }
 
-    cpu.setTraceSink(null);
-    cpu.run(maxCycles);
-
-    List<String> trace = cpu.drainRetireTrace();
-    for (String line: trace) {
-      System.out.println(line);
+      MemIO.write(Paths.get(outBase + ".mem"), cpu.getPC(), cpu.getACC(), cpu.getMem());
+    } else {
+      cpu.setTraceSink(null);
+      cpu.run(maxCycles);
+      for (String line : cpu.drainRetireTrace()) {
+        System.out.println(line);
+      }
     }
-    printStats(cpu, memFile);
+    
+    printStats(cpu, outBase != null ? outBase : memFile);
   }
 
   private static final String[][] OPCODE_ORDER = new String[][]{
@@ -78,12 +88,9 @@ public final class Sim {
 
   private static void printStats(Cpu c, String base){
     System.out.println("=== S12 Pipeline Run ==");
-    System.out.printf("Base:       %s%n", base);
     System.out.printf("Cycles:   %d%n", c.getCycles());
-    System.out.printf("Retired:%d%n", c.getRetired());
-    System.out.printf("PC:     0x%02X%nACC:  0x%03X%n", c.getPC(), c.getACC());
     System.out.printf("Stalls:   %d%n", c.getStalls());
-    System.out.printf("Fwd EX->EX: %d%nFwd MEM->Ex: %d%n", c.getFwdEXtoEX(), c.getFwdMEMtoEX());
+    System.out.printf("Fwd MEM->Ex: %d%n", c.getFwdMEMtoEX());
     printInstructionMix(c.getInstructionMix());
   }  
   

@@ -33,3 +33,156 @@ S12 instructions:
     OR X    A <- A or M(X), PC++
     ADD X   A <- A + M(X), PC++
     SUB X   A <- A - M(X), PC++
+
+Spencer:
+    5-Stage Pipeline datapath: IF->ID->EX->MEM->WB w/Indirect addressing in MEM & Forwarding & Hazard control
+
+    Architectural State:
+        8-bit PC,
+        12-bit ACC,
+        256x12-bit memory
+
+    Instruction Format:
+        [11:8] opcode (4 bits), [7:0] operand/address (8 bits)
+
+    Pipeline Stages:
+        IF (Fetch):
+	        instr = mem[PC]
+            push -> IF/ID
+            PC++
+            if(halted) -> IF/ID invalid
+            if(stall) -> IF holds
+
+        ID (Decode):
+            decode opcode -> Ctrl
+            sample ACC as accVal
+            pass X=instr[7:0]
+            if(stall) -> ID inserts bubble -> clear ID/EX
+
+        EX (Execute):
+        	choose a = ACC with forwarding
+            evaluate branch condition;
+                on taken -> write PC <- X 
+                    flush IF
+                    bubble ID
+            fill EX/MEM
+
+        MEM (Memory):
+            eff = UseIndir ? mem[X][7:0] : X
+            if(MemRead=1)
+                LOAD/LOADI: wbData = mem[eff]
+                AND/OR/ADD/SUB: wbData = a (ACC) * mem[eff] with 12-bit wrap
+            if(MemWrite =1)
+                write mem[eff] = a (ACC)
+            Pass wbData to MEM/WB + trace information
+
+        WB (Writeback):
+	        if(RegWrite=1)
+                ACC <- wbData
+            if(HALT)
+                halted = 1
+            add retire line to traceSink
+
+    Latches (Move Data Between Stages/Holds Instricon Data):
+        IF/ID:
+            pc
+            instr
+            valid
+        ID/EX:
+            pc
+            instr
+            op
+            X(operand)
+            accVal
+            ctrl
+            valid
+        EX/MEM:
+            pc
+            op
+            memAddr(X)
+            aluRes (pass-through ACC for this design)
+            storeData(ACC)
+            ctrl
+            branch data
+            valid
+        MEM/WB:
+            pc
+            op
+            wbData
+            ctrl
+            mem write data
+            branch data
+            valid
+
+    Tick Order:
+        WB -> WB snapshot data for forwarding -> MEM -> hazardDetectAndStallDecision()
+        -> EX -> ID(stall?) ->IF(stall?)
+
+        Tick order design:
+            It ensures EX can see the just-committed value via the WB snapshot even
+            if MEM overwrites the live MEM/WB latch later in the cycle. That's what 
+            deals with load->use and mem-ALU->use cases
+
+    Control Signals (from Ctrl)
+        RegWrite - Write to ACC in WB
+        MemRead - Read memory during MEM
+        MemWrite - Write memory during MEM
+        BranchJmp - Instruction is a transfer (JMP, JN, JZ)
+        UseIndir - indirect addressing mem[X] not X (LOADI, STOREI)
+        alu - {PASS, ADD, SUB, AND, OR, NONE}
+        op - (Op.JMP, Op,ADD) - enum 
+
+| Op     | BranchJmp | MemRead | MemWrite | RegWrite | UseIndir | ALU  | Produces result in…    |
+| ------ | --------- | ------- | -------- | -------- | -------- | ---- | ---------------------- |
+| NOP    | 0         | 0       | 0        | 0        | 0        | NONE | —                      |
+| HALT   | 0         | 0       | 0        | 0        | 0        | NONE | —                      |
+| JMP    | 1         | 0       | 0        | 0        | 0        | NONE | — (control only)       |
+| JN     | 1         | 0       | 0        | 0        | 0        | NONE | — (control only)       |
+| JZ     | 1         | 0       | 0        | 0        | 0        | NONE | — (control only)       |
+| LOAD   | 0         | 1       | 0        | 1        | 0        | PASS | MEM (take mem[eff])    |
+| STORE  | 0         | 0       | 1        | 0        | 0        | PASS | — (side effect in MEM) |
+| LOADI  | 0         | 1       | 0        | 1        | 1        | PASS | MEM (take mem[mem[X]]) |
+| STOREI | 0         | 0       | 1        | 0        | 1        | PASS | —                      |
+| AND    | 0         | 1       | 0        | 1        | 0        | AND  | MEM (ACC & mem[eff])   |
+| OR     | 0         | 1       | 0        | 1        | 0        | OR   | MEM (ACC | mem[eff])   |   
+| ADD    | 0         | 1       | 0        | 1        | 0        | ADD  | MEM (ACC + mem[eff])   |
+| SUB    | 0         | 1       | 0        | 1        | 0        | SUB  | MEM (ACC - mem[eff])   |
+
+Effective Address:
+    base = X
+    eff = UseIndir ? mem[base][7:0] : base
+
+Stall policy (dual-boundary, single bubble):
+    We stall when a MEM-producting instuction is ahead of an instruction that uses ACC, at either
+    of the next two boundaries:
+        A) Producer in ID/EX, consumer in IF/ID (consumer would reach EX next cycle)
+        B) Producer in EX/MEM, consumer in ID/EX (consumer already advanced; still too early)
+    If A or B is true, we insert one bubble (hold IF/ID, clear ID/EX). With the WB snapshot,
+    the consumer then sees the correct ACC the following cycle in EX. 
+    This covers:
+        LOAD -> ADD, LOAD -> JZ, LOAD -> STORE
+        AND/OR/ADD/SUB -> (any needsACC)
+        LOADI -> (any needsACC)
+
+Forwarding:
+    MEM/WB -> EX (WB snapshot):
+        if the previous instrucion wrote ACC (i.e., RegWrite=1), EX picks a = wbData instead of the old id_ex.accVal
+    EX -> EX:
+        available but not exercised mem-operand ALU ops produce in MEM by this design 
+
+Sample Program with Pipleine timeline:
+    00 LOAD  30   ; ACC=3
+    01 ADD   31   ; ACC=3+4=7  (consumes ACC → hazard after LOAD)
+    02 STORE 32   ; MEM[32]=7  (consumes ACC → hazard after ADD)
+    03 HALT
+
+Cycles →      1      2      3      4      5      6      7      8      9     10
+-------------------------------------------------------------------------------
+00: LOAD     IF →   ID →   EX →   MEM →   WB
+01: ADD             IF →   ID →   (—)    EX →   MEM →   WB
+02: STORE                   IF →   ID →   (—)    EX →   MEM →   (WB*)
+03: HALT                                  IF →   ID →   EX →    MEM →   WB (halt)
+-------------------------------------------------------------------------------
+Legend: IF=Instruction Fetch, ID=Decode, EX=Execute, MEM=Memory/ALU, WB=Writeback
+        (—) = bubble (stall)
+        (WB*) = STORE doesn’t write ACC; WB stage is effectively idle

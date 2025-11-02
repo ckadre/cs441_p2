@@ -1,0 +1,20 @@
+//Authors: Cameron Kadre, Gail Kinder, Spencer Ford 
+//Version 1- optimized for time
+//The first integer is given at address 0xA0. The second integer is given at address 0xA1. 
+//Address 0xA2 stores the decimal value 001. Address 0xA3 stores the running total, and its initial value is 0.
+
+00000000  000000000000
+00  010010100001 //Loads the value in address 0xA1 - multiplier
+01  001000001000 //Jump to address 0x08 if 0
+02  101110100010 //Subtract value in 0xA2 - 001
+03  010110100001 //Store value in 0xA1
+04  010010100000 //Load value in address 0xA0 - multiplicand
+05  101010100011 //Add value at 0xA3 - running sum
+06  010110100011 //Store value in 0xA3
+07  000000000000 //Jump to beginning of loop
+08  111100000000 //HALT
+
+A0  000000000101   // +5 Set multiplicand
+A1  000000001010   // +10 Set multiplier
+A2  000000000001   // +1 Constant 1 for Subtract
+A3  000000000000   // 0 Sum of addition

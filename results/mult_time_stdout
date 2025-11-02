@@ -1,0 +1,12 @@
+=== S12 Pipeline Run ==
+Cycles:   139
+Stalls:   41
+Fwd MEM->Ex: 39
+Instruction Mix:
+  JMP:    10
+  JZ:     11
+  LOAD:   21
+  STORE:  20
+  ADD:    10
+  SUB:    10
+  HALT:   1
