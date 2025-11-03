@@ -8,6 +8,17 @@ import static isa.Bits.*;
 
 import java.util.*;
 
+/**
+ * Five-stage, in-order, single-issue pipeline for the S12 ISA.
+ *
+ * Stages: IF → ID → EX → MEM → WB
+ *
+ * Tick order:
+ * WB → snapshot WB → MEM → hazard detect → EX → ID → IF.
+ *
+ * WB runs first so MEM/WB from the previous cycle is architecturally visible.
+ * The WB snapshot is used for MEM→EX forwarding during the same tick.
+ */
 public final class S12Pipe implements Cpu {
 
   // Architectural state
@@ -15,7 +26,7 @@ public final class S12Pipe implements Cpu {
   private final int[] mem = new int[256];
   private boolean halted = false;
 
-  // Pipeline regs
+  // Pipeline latches
   private final Latches.IF_ID  if_id  = new Latches.IF_ID();
   private final Latches.ID_EX  id_ex  = new Latches.ID_EX();
   private final Latches.EX_MEM ex_mem = new Latches.EX_MEM();
@@ -40,9 +51,14 @@ public final class S12Pipe implements Cpu {
   // Cpu impl
   @Override 
   public void reset(){
-    PC=0; ACC=0; halted=false;
+    PC=0; 
+    ACC=0; 
+    halted=false;
     Arrays.fill(mem, 0);
-    if_id.clear(); id_ex.clear(); ex_mem.clear(); mem_wb.clear();
+    if_id.clear(); 
+    id_ex.clear(); 
+    ex_mem.clear(); 
+    mem_wb.clear();
     cycles=retired=stallCount=fwdEXCount=fwdMEMCount=0;
     Arrays.fill(opcodeCounts, 0);
     retireQ.clear();
@@ -57,12 +73,16 @@ public final class S12Pipe implements Cpu {
   @Override public void setForwardingEnabled(boolean en){ enableForwarding = en; }
   @Override public boolean isForwardingEnabled(){ return enableForwarding; }
 
+  /**
+   * Executes one full pipeline tick in the following order:
+   * WB → snapshot WB → MEM → hazard detection → EX → ID → IF.
+   */
   @Override public void tick(){
     WB();
 
-    wbBypassValid    = mem_wb.valid;
+    wbBypassValid = mem_wb.valid;
     wbBypassRegWrite = wbBypassValid && mem_wb.ctrl != null && mem_wb.ctrl.RegWrite;
-    wbBypassData     = wbBypassValid ? (mem_wb.wbData & 0xFFF) : 0;
+    wbBypassData = wbBypassValid ? (mem_wb.wbData & 0xFFF) : 0;
 
     MEM();
 
@@ -73,6 +93,11 @@ public final class S12Pipe implements Cpu {
     cycles++;
   }
 
+  /**
+   * Runs the CPU until HALT or a cycle cap is reached.
+   *
+   * @param maxCycles optional limit; null means run until HALT.
+   */
   @Override public void run(Integer maxCycles){
     while (!halted && (maxCycles == null || cycles < maxCycles)) tick();
   }
@@ -90,9 +115,14 @@ public final class S12Pipe implements Cpu {
   @Override public long[] getInstructionMix(){ return opcodeCounts; }
 
   @Override public void setTraceSink(TraceSink s){ this.sink = s; }
-  @Override public List<String> drainRetireTrace(){ var out = new ArrayList<String>(retireQ); retireQ.clear(); return out; }
+  
+  /** Returns all pending trace lines and clears the retire queue. */
+  @Override public List<String> drainRetireTrace(){ 
+    var out = new ArrayList<String>(retireQ); 
+    retireQ.clear(); 
+    return out; }
 
-  // --- Stages ---
+  /** Instruction Fetch (IF): fetches the next instruction if not stalled. */
   private void IF(boolean stalled){
     if (halted) { if_id.valid=false; return; }
     if (stalled) return;
@@ -102,6 +132,7 @@ public final class S12Pipe implements Cpu {
     PC = m8(PC + 1);
   }
 
+  /** Decodes an opcode into a Ctrl structure describing control signals. */
   private Ctrl decode(Op op){
     Ctrl c = new Ctrl(); c.op = op;
     switch (op){
@@ -122,6 +153,7 @@ public final class S12Pipe implements Cpu {
     return c;
   }
 
+  /** Instruction Decode (ID): decodes IF/ID into ID/EX and prepares operands. */
   private void ID(boolean stalled){
     if (!if_id.valid) { id_ex.clear(); return; }
     if (stalled){ id_ex.clear(); stallCount++; return; }
@@ -136,27 +168,26 @@ public final class S12Pipe implements Cpu {
     id_ex.valid  = true;
   }
 
-  private static boolean producesInEX(Ctrl c){ return c != null && c.RegWrite && !c.MemRead; }
-
+  /** Execute (EX): performs ALU operations and branch target calculation. */
   private void EX(){
-    if (!id_ex.valid) { ex_mem.clear(); return; }
+    if (!id_ex.valid) { 
+      ex_mem.clear(); 
+      return; 
+    }
 
     int a = id_ex.accVal;
 
-    if (enableForwarding){
-      // EX->EX forward: producer writes in EX (ALU/pass)
-      if (ex_mem.valid && producesInEX(ex_mem.ctrl)) {
-        int cand = ex_mem.aluRes;
-        if (cand != a) { a = cand; fwdEXCount++; }
-      }
-      // MEM/WB->EX forward: producer writes in MEM (loads/mem-ALU)
-      else if (wbBypassValid && wbBypassRegWrite) {
-        int cand = wbBypassData & 0xFFF;
-        if (cand != a) { a = cand; fwdMEMCount++; }
+    // MEM->EX forwarding
+    if (enableForwarding && wbBypassValid && wbBypassRegWrite){
+      int cand = wbBypassData & 0xFFF;
+      if (cand != a) { 
+        a = cand;
+        fwdMEMCount++;
       }
     }
+    boolean redirect=false; 
+    int target = m8(id_ex.X);
 
-    boolean redirect=false; int target = m8(id_ex.X);
     if (id_ex.ctrl.BranchJmp){
       switch (id_ex.op){
         case JMP: redirect = true; break;
@@ -182,10 +213,14 @@ public final class S12Pipe implements Cpu {
     ex_mem.branchTarget = target;
   }
 
+  /** Memory (MEM): performs memory reads/writes and computes writeback data. */
   private void MEM(){
-    if (!ex_mem.valid) { mem_wb.clear(); return; }
+    if (!ex_mem.valid) { 
+      mem_wb.clear(); 
+      return; 
+    }
 
-    int dataOut = ex_mem.aluRes;             // default pass-through (ACC)
+    int dataOut = ex_mem.aluRes;           
     int base = ex_mem.memAddr & 0xFF;
     int eff  = ex_mem.ctrl.UseIndir ? (mem[base] & 0xFF) : base;
 
@@ -194,12 +229,9 @@ public final class S12Pipe implements Cpu {
 
     if (ex_mem.ctrl.MemRead){
       int mval = mem[eff] & 0xFFF;
-
-      // Loads: take memory value directly
       if (ex_mem.op == Op.LOAD || ex_mem.op == Op.LOADI){
         dataOut = mval;
       } else {
-        // Arithmetic/logic opcodes: ACC (storeData) op mem[eff]
         switch (ex_mem.op){
           case ADD: dataOut = m12(ex_mem.storeData +  mval); break;
           case SUB: dataOut = m12(ex_mem.storeData -  mval); break;
@@ -220,8 +252,6 @@ public final class S12Pipe implements Cpu {
     mem_wb.wbData      = m12(dataOut);
     mem_wb.ctrl        = Ctrl.copyOf(ex_mem.ctrl);
     mem_wb.valid       = true;
-
-    // enrich WB for trace
     mem_wb.didMemWrite = didWrite;
     mem_wb.effAddr     = eff;
     mem_wb.storeVal    = m12(storeVal);
@@ -229,9 +259,9 @@ public final class S12Pipe implements Cpu {
     mem_wb.branchTarget= ex_mem.branchTarget;
   }
 
+  /** Writeback (WB): commits results to ACC and finalizes instruction retirement. */
   private void WB(){
     if (!mem_wb.valid) return;
-
     if (mem_wb.ctrl.RegWrite) ACC = m12(mem_wb.wbData);
 
     if (mem_wb.ctrl.op != Op.NOP){
@@ -244,39 +274,43 @@ public final class S12Pipe implements Cpu {
     if (mem_wb.ctrl.op == Op.HALT) halted = true;
   }
 
+  /** True if instruction writes ACC in MEM stage (e.g. LOAD, LOADI, ALU ops). */
   private static boolean producesInMEM(Ctrl c) {
-    return c != null && c.RegWrite && c.MemRead; // LOAD, LOADI, ADD, SUB, AND, OR
+    return c != null && c.RegWrite && c.MemRead;
   }
+
+  /** Returns the opcode of the instruction currently in IF/ID. */
   private static Op decodeIfID(int instr){ return Op.fromNibble((instr >> 8) & 0xF); }
 
-  // --- Hazards ---
+   /** Returns true if an opcode requires reading ACC as an input. */
   private static boolean needsACC(Op op){
     switch (op){
       case ADD: case SUB: case AND: case OR:
       case STORE: case STOREI:
       case JN: case JZ:
         return true;
-      default: return false; // LOAD, LOADI, JMP, HALT, NOP
+      default: return false;
     }
   }
 
+  /**
+   * Detects load-use hazards and inserts one stall when needed.
+   *
+   * Returns true if the next instruction must stall due to an unavailable ACC value.
+   */
   private boolean hazardDetectAndStallDecision() {
     boolean prodA = id_ex.valid && producesInMEM(id_ex.ctrl);
     Op ifidOp = if_id.valid ? decodeIfID(if_id.instr) : Op.NOP;
     boolean consA = needsACC(ifidOp);
-  
-    boolean prodB = ex_mem.valid && producesInMEM(ex_mem.ctrl);
-    boolean consB = id_ex.valid && needsACC(id_ex.op);
-  
-    boolean stall = (prodA && consA) || (prodB && consB);
-  
-    return stall;
+
+    return prodA && consA;
   }
 
   // Trace formatting
   private static String hex2(int x){ return String.format("%02X", x & 0xFF); }
   private static String hex3(int x){ return String.format("%03X", x & 0xFFF); }
 
+  /** Returns a mnemonic with operand for the given instruction word. */
   private String mnemonicFor(Op op, int instr){
     int X = instr & 0xFF;
     switch (op){
@@ -296,6 +330,7 @@ public final class S12Pipe implements Cpu {
     }
   }
 
+  /** Formats the retire line for the current WB bundle (branch/mem/reg-write cases). */
   private String formatRetireLine(Latches.MEM_WB wb){
     int pc    = wb.pc & 0xFF;
     int instr = mem[pc] & 0xFFF;
